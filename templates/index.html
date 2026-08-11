@@ -13,28 +13,17 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 15px;
         }
-        h1 { 
-            text-align: center; 
-            color: #4e92df; 
-            margin-bottom: 20px; 
-            font-size: 1.6em;
-        }
-
-        /* MATRIZ FIJA DE 5 COLUMNAS */
+        h1 { text-align: center; color: #4e92df; margin-bottom: 20px; font-size: 1.6em; }
+        
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(5, 1fr); /* 5 columnas iguales */
+            grid-template-columns: repeat(5, 1fr);
             gap: 12px;
             width: 100%;
         }
 
-        /* Si la pantalla es pequeña (móvil/tablet), ajusta automáticamente */
-        @media (max-width: 1200px) {
-            .grid-container { grid-template-columns: repeat(3, 1fr); }
-        }
-        @media (max-width: 768px) {
-            .grid-container { grid-template-columns: repeat(1, 1fr); }
-        }
+        @media (max-width: 1200px) { .grid-container { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px) { .grid-container { grid-template-columns: repeat(1, 1fr); } }
 
         .card {
             background: #1e222d;
@@ -66,10 +55,7 @@
             background: #2a2e39;
             color: #888;
         }
-        .chart-container { 
-            height: 150px; 
-            width: 100%; 
-        }
+        .chart-container { height: 150px; width: 100%; }
     </style>
 </head>
 <body>
@@ -87,7 +73,6 @@
         const charts = {};
         const series = {};
 
-        // PASO 1: Crear la estructura DOM de las 20 tarjetas inmediatamente
         function initDOM() {
             const container = document.getElementById('dashboard');
             container.innerHTML = '';
@@ -108,7 +93,6 @@
             });
         }
 
-        // PASO 2: Inicializar gráficos sobre cada contenedor existente
         function initCharts() {
             PARES.forEach(par => {
                 const cleanId = par.replace('/', '_');
@@ -131,17 +115,15 @@
                         charts[par] = chart;
                         series[par] = candlestickSeries;
                     } catch (e) {
-                        console.error(`Error al crear gráfico para ${par}:`, e);
+                        console.error(`Error ${par}:`, e);
                     }
                 }
             });
         }
 
-        // Ejecutar montaje en orden
         initDOM();
         setTimeout(initCharts, 200);
 
-        // PASO 3: Recepción de datos en tiempo real mediante WebSocket
         const socket = io();
 
         function updateParData(par, info) {
@@ -151,7 +133,7 @@
 
             if (info.candles && info.candles.length > 0) {
                 const formattedCandles = info.candles.map(c => ({
-                    time: Math.floor(new Date(c.time).getTime() / 1000),
+                    time: c.time,
                     open: c.open,
                     high: c.high,
                     low: c.low,
