@@ -1,6 +1,6 @@
+import os
 import time
 import requests
-import MetaTrader5 as mt5
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 import threading
@@ -12,102 +12,100 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # CONFIGURACIÓN
 # ==========================================
 PARES = [
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-    "USDCHF", "EURGBP", "EURJPY", "GBPJPY", "EURCAD"
+    "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
+    "USD/CHF", "EUR/GBP", "EUR/JPY", "GBP/JPY", "EUR/CAD"
 ]
 
-# Configura tu Bot de Telegram
-TELEGRAM_BOT_TOKEN = "TU_BOT_TOKEN_AQUI"
-TELEGRAM_CHAT_ID = "TU_CHAT_ID_AQUI"
+TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "demo")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 alerta_enviada = {par: False for par in PARES}
 
 def enviar_telegram(mensaje):
-    if TELEGRAM_BOT_TOKEN != "TU_BOT_TOKEN_AQUI":
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "HTML"}
         try:
-            requests.post(url, data=data)
+            requests.post(url, data=data, timeout=5)
         except Exception as e:
-            print(f"Error enviando mensaje a Telegram: {e}")
+            print(f"Error enviado Telegram: {e}")
 
-def obtener_datos_mt5():
-    if not mt5.initialize():
-        print("Fallo al inicializar MT5")
-        return None
-
+def obtener_datos_forex():
     datos_dashboard = {}
 
     for par in PARES:
-        # Obtener las últimas 5 velas de 4 Horas (H4)
-        rates_h4 = mt5.copy_rates_from_pos(par, mt5.TIMEFRAME_H4, 0, 5)
-        if rates_h4 is None or len(rates_h4) < 2:
-            continue
+        try:
+            # Petición de velas de 4 Horas (H4) a la API en la nube
+            url = f"https://api.twelvedata.com/time_series?symbol={par}&interval=4h&outputsize=5&apikey={TWELVEDATA_API_KEY}"
+            res = requests.get(url, timeout=5).json()
 
-        # Vela H4 cerrada anterior (referencia de liquidez)
-        vela_ref = rates_h4[-2]
-        max_h4_ref = float(vela_ref['high'])
-        min_h4_ref = float(vela_ref['low'])
+            if "values" not in res:
+                continue
 
-        # Velas para el mini-gráfico
-        candles_h4 = []
-        for r in rates_h4:
-            candles_h4.append({
-                'time': int(r['time']),
-                'open': float(r['open']),
-                'high': float(r['high']),
-                'low': float(r['low']),
-                'close': float(r['close'])
-            })
+            values = list(reversed(res["values"])) # Ordenar de más antigua a más reciente
+            
+            candles_h4 = []
+            for v in values:
+                candles_h4.append({
+                    'time': v['datetime'],
+                    'open': float(v['open']),
+                    'high': float(v['high']),
+                    'low': float(v['low']),
+                    'close': float(v['close'])
+                })
 
-        # Comprobar barrido en vivo con el precio actual
-        precio_actual = candles_h4[-1]['close']
-        high_actual = candles_h4[-1]['high']
-        low_actual = candles_h4[-1]['low']
+            # Vela de referencia (H4 cerrada previa)
+            vela_ref = candles_h4[-2]
+            max_h4_ref = vela_ref['high']
+            min_h4_ref = vela_ref['low']
 
-        barrido_high = high_actual > max_h4_ref
-        barrido_low = low_actual < min_h4_ref
+            # Estado actual
+            precio_actual = candles_h4[-1]['close']
+            high_actual = candles_h4[-1]['high']
+            low_actual = candles_h4[-1]['low']
 
-        # Control de Alertas por Telegram
-        if barrido_high and not alerta_enviada[par]:
-            enviar_telegram(f"🚨 <b>BARRIDO DE MÁXIMO H4 (Turtle Soup Corto)</b>\n📌 <b>Par:</b> {par}\n📈 <b>Máximo H4:</b> {max_h4_ref}\n🔥 <b>Precio Actual:</b> {precio_actual}")
-            alerta_enviada[par] = True
+            barrido_high = high_actual > max_h4_ref
+            barrido_low = low_actual < min_h4_ref
 
-        elif barrido_low and not alerta_enviada[par]:
-            enviar_telegram(f"🚨 <b>BARRIDO DE MÍNIMO H4 (Turtle Soup Largo)</b>\n📌 <b>Par:</b> {par}\n📉 <b>Mínimo H4:</b> {min_h4_ref}\n🔥 <b>Precio Actual:</b> {precio_actual}")
-            alerta_enviada[par] = True
+            # Alertas Telegram
+            if barrido_high and not alerta_enviada[par]:
+                enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4 (Turtle Soup Corto)</b>\n📌 <b>Par:</b> {par}\n📈 <b>Nivel H4:</b> {max_h4_ref}\n🔥 <b>Precio:</b> {precio_actual}")
+                alerta_enviada[par] = True
+            elif barrido_low and not alerta_enviada[par]:
+                enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4 (Turtle Soup Largo)</b>\n📌 <b>Par:</b> {par}\n📉 <b>Nivel H4:</b> {min_h4_ref}\n🔥 <b>Precio:</b> {precio_actual}")
+                alerta_enviada[par] = True
 
-        # Resetear alerta si vuelve a zonas normales
-        if not barrido_high and not barrido_low:
-            alerta_enviada[par] = False
+            if not barrido_high and not barrido_low:
+                alerta_enviada[par] = False
 
-        datos_dashboard[par] = {
-            'candles': candles_h4,
-            'max_h4': max_h4_ref,
-            'min_h4': min_h4_ref,
-            'barrido_high': barrido_high,
-            'barrido_low': barrido_low
-        }
+            datos_dashboard[par] = {
+                'candles': candles_h4,
+                'max_h4': max_h4_ref,
+                'min_h4': min_h4_ref,
+                'barrido_high': barrido_high,
+                'barrido_low': barrido_low
+            }
+        except Exception as e:
+            print(f"Error procesando {par}: {e}")
 
     return datos_dashboard
 
-def bucle_transmision():
-    """Bucle que transmite los datos cada segundo a la web"""
+def bucle_monitoreo():
     while True:
-        datos = obtener_datos_mt5()
+        datos = obtener_datos_forex()
         if datos:
             socketio.emit('update_data', datos)
-        time.sleep(1) # Actualización en vivo segundo a segundo
+        time.sleep(15) # Consulta periódica en la nube
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    # Hilo secundario para captura continua de precios
-    t = threading.Thread(target=bucle_transmision)
+    t = threading.Thread(target=bucle_monitoreo)
     t.daemon = True
     t.start()
     
-    print("🚀 Servidor Web en vivo lanzado en http://localhost:5000")
-    socketio.run(app, host='0.0.0.0', port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host='0.0.0.0', port=port)
