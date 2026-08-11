@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Turtle Soup - Matriz 20 Pares</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         body {
             background-color: #12151e;
@@ -11,14 +12,8 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 15px;
         }
-        h1 { 
-            text-align: center; 
-            color: #4e92df; 
-            margin-bottom: 20px; 
-            font-size: 1.6em;
-        }
+        h1 { text-align: center; color: #4e92df; margin-bottom: 20px; font-size: 1.6em; }
 
-        /* MATRIZ FIJA DE 5 COLUMNAS */
         .grid-container {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -38,8 +33,16 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
-            height: 220px;
+            height: 240px;
+            transition: border-color 0.3s ease;
         }
+
+        /* EFECTO PARPADEO CUANDO HAY BARRIDO */
+        .card.barrido-top { border-color: #ff5252; animation: blink-red 1s infinite; }
+        .card.barrido-bottom { border-color: #00e676; animation: blink-green 1s infinite; }
+
+        @keyframes blink-red { 50% { border-color: transparent; box-shadow: 0 0 15px rgba(255, 82, 82, 0.8); } }
+        @keyframes blink-green { 50% { border-color: transparent; box-shadow: 0 0 15px rgba(0, 230, 118, 0.8); } }
 
         .card-header {
             display: flex;
@@ -52,6 +55,14 @@
             margin-bottom: 4px;
         }
 
+        .status-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #2a2e39;
+            color: #888;
+        }
+
         .tradingview-widget-container {
             width: 100%;
             height: 100%;
@@ -60,32 +71,32 @@
 </head>
 <body>
 
-    <h1>🐢 DASHBOARD TURTLE SOUP (MATRIZ 20 PARES H4)</h1>
+    <h1>🐢 DASHBOARD TURTLE SOUP (MATRIZ CON ALERTAS VISUALES H4)</h1>
     <div class="grid-container" id="dashboard"></div>
 
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script>
         const PARES = [
-            { nombre: "EUR/USD", symbol: "FX:EURUSD" },
-            { nombre: "GBP/USD", symbol: "FX:GBPUSD" },
-            { nombre: "USD/JPY", symbol: "FX:USDJPY" },
-            { nombre: "AUD/USD", symbol: "FX:AUDUSD" },
-            { nombre: "NZD/USD", symbol: "FX:NZDUSD" },
-            { nombre: "USD/CAD", symbol: "FX:USDCAD" },
-            { nombre: "USD/CHF", symbol: "FX:USDCHF" },
-            { nombre: "EUR/GBP", symbol: "FX:EURGBP" },
-            { nombre: "EUR/JPY", symbol: "FX:EURJPY" },
-            { nombre: "GBP/JPY", symbol: "FX:GBPJPY" },
-            { nombre: "EUR/CAD", symbol: "FX:EURCAD" },
-            { nombre: "AUD/JPY", symbol: "FX:AUDJPY" },
-            { nombre: "GBP/AUD", symbol: "FX:GBPAUD" },
-            { nombre: "EUR/AUD", symbol: "FX:EURAUD" },
-            { nombre: "USD/MXN", symbol: "FX:USDMXN" },
-            { nombre: "USD/ZAR", symbol: "FX:USDZAR" },
-            { nombre: "USD/NOK", symbol: "FX:USDNOK" },
-            { nombre: "USD/SEK", symbol: "FX:USDSEK" },
-            { nombre: "USD/TRY", symbol: "FX:USDTRY" },
-            { nombre: "USD/SGD", symbol: "FX:USDSGD" }
+            { nombre: "EUR/USD", symbol: "FX:EURUSD", id: "EUR_USD" },
+            { nombre: "GBP/USD", symbol: "FX:GBPUSD", id: "GBP_USD" },
+            { nombre: "USD/JPY", symbol: "FX:USDJPY", id: "USD_JPY" },
+            { nombre: "AUD/USD", symbol: "FX:AUDUSD", id: "AUD_USD" },
+            { nombre: "NZD/USD", symbol: "FX:NZDUSD", id: "NZD_USD" },
+            { nombre: "USD/CAD", symbol: "FX:USDCAD", id: "USD_CAD" },
+            { nombre: "USD/CHF", symbol: "FX:USDCHF", id: "USD_CHF" },
+            { nombre: "EUR/GBP", symbol: "FX:EURGBP", id: "EUR_GBP" },
+            { nombre: "EUR/JPY", symbol: "FX:EURJPY", id: "EUR_JPY" },
+            { nombre: "GBP/JPY", symbol: "FX:GBPJPY", id: "GBP_JPY" },
+            { nombre: "EUR/CAD", symbol: "FX:EURCAD", id: "EUR_CAD" },
+            { nombre: "AUD/JPY", symbol: "FX:AUDJPY", id: "AUD_JPY" },
+            { nombre: "GBP/AUD", symbol: "FX:GBPAUD", id: "GBP_AUD" },
+            { nombre: "EUR/AUD", symbol: "FX:EURAUD", id: "EUR_AUD" },
+            { nombre: "USD/MXN", symbol: "FX:USDMXN", id: "USD_MXN" },
+            { nombre: "USD/ZAR", symbol: "FX:USDZAR", id: "USD_ZAR" },
+            { nombre: "USD/NOK", symbol: "FX:USDNOK", id: "USD_NOK" },
+            { nombre: "USD/SEK", symbol: "FX:USDSEK", id: "USD_SEK" },
+            { nombre: "USD/TRY", symbol: "FX:USDTRY", id: "USD_TRY" },
+            { nombre: "USD/SGD", symbol: "FX:USDSGD", id: "USD_SGD" }
         ];
 
         function initDashboard() {
@@ -96,35 +107,59 @@
                 const containerId = `tv_chart_${index}`;
                 const card = document.createElement('div');
                 card.className = 'card';
+                card.id = `card_${par.id}`;
                 card.innerHTML = `
                     <div class="card-header">
                         <span>${par.nombre}</span>
-                        <span style="color:#4e92df; font-size:0.8em;">H4</span>
+                        <span class="status-badge" id="status_${par.id}">Monitoreando</span>
                     </div>
                     <div id="${containerId}" class="tradingview-widget-container"></div>
                 `;
                 container.appendChild(card);
 
-                // Carga directa del widget nativo de TradingView
                 new TradingView.widget({
                     "autosize": true,
                     "symbol": par.symbol,
-                    "interval": "240", // 240 minutos = 4 Horas (H4)
+                    "interval": "240",
                     "timezone": "Etc/UTC",
                     "theme": "dark",
-                    "style": "1", // Velas japonesas
+                    "style": "1",
                     "locale": "es",
-                    "toolbar_bg": "#f1f3f6",
                     "enable_publishing": false,
                     "hide_top_toolbar": true,
                     "hide_legend": true,
-                    "save_image": false,
                     "container_id": containerId
                 });
             });
         }
 
         window.onload = initDashboard;
+
+        // CONEXIÓN CON EL SERVIDOR PYTHON EN TIEMPO REAL
+        const socket = io();
+
+        socket.on('alerta_barrido', (data) => {
+            const parId = data.par.replace('/', '_');
+            const card = document.getElementById(`card_${parId}`);
+            const status = document.getElementById(`status_${parId}`);
+
+            if (card && status) {
+                card.classList.remove('barrido-top', 'barrido-bottom');
+
+                if (data.tipo === 'HIGH') {
+                    card.classList.add('barrido-top');
+                    status.innerHTML = "🚨 BARRIDO MÁXIMO";
+                    status.style.color = "#ff5252";
+                } else if (data.tipo === 'LOW') {
+                    card.classList.add('barrido-bottom');
+                    status.innerHTML = "🚨 BARRIDO MÍNIMO";
+                    status.style.color = "#00e676";
+                } else {
+                    status.innerHTML = "Monitoreando";
+                    status.style.color = "#888";
+                }
+            }
+        });
     </script>
 </body>
 </html>
