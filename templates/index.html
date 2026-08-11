@@ -13,46 +13,68 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 15px;
         }
-        h1 { text-align: center; color: #4e92df; margin-bottom: 20px; }
+        h1 { 
+            text-align: center; 
+            color: #4e92df; 
+            margin-bottom: 20px; 
+            font-size: 1.6em;
+        }
+
+        /* MATRIZ FIJA DE 5 COLUMNAS */
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(5, 1fr); /* 5 columnas iguales */
+            gap: 12px;
+            width: 100%;
         }
+
+        /* Si la pantalla es pequeña (móvil/tablet), ajusta automáticamente */
+        @media (max-width: 1200px) {
+            .grid-container { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .grid-container { grid-template-columns: repeat(1, 1fr); }
+        }
+
         .card {
             background: #1e222d;
             border-radius: 8px;
-            padding: 10px;
+            padding: 8px;
             border: 2px solid #2a2e39;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            transition: border-color 0.3s ease;
+            display: flex;
+            flex-direction: column;
         }
         .card.barrido-top { border-color: #ff5252; animation: blink 1s infinite; }
         .card.barrido-bottom { border-color: #00e676; animation: blink 1s infinite; }
         @keyframes blink { 50% { border-color: transparent; } }
+
         .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
-            font-size: 1.05em;
-            margin-bottom: 8px;
-            padding-bottom: 5px;
+            font-size: 0.95em;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
             border-bottom: 1px solid #2a2e39;
         }
         .status-tag {
-            font-size: 0.8em;
-            padding: 2px 6px;
+            font-size: 0.75em;
+            padding: 2px 5px;
             border-radius: 4px;
             background: #2a2e39;
             color: #888;
         }
-        .chart-container { height: 170px; width: 100%; }
+        .chart-container { 
+            height: 150px; 
+            width: 100%; 
+        }
     </style>
 </head>
 <body>
 
-    <h1>🐢 DASHBOARD TURTLE SOUP (20 PARES H4 EN VIVO)</h1>
+    <h1>🐢 DASHBOARD TURTLE SOUP (MATRIZ 20 PARES H4)</h1>
     <div class="grid-container" id="dashboard"></div>
 
     <script>
@@ -65,76 +87,98 @@
         const charts = {};
         const series = {};
 
-        function initDashboard() {
+        // PASO 1: Crear la estructura DOM de las 20 tarjetas inmediatamente
+        function initDOM() {
             const container = document.getElementById('dashboard');
+            container.innerHTML = '';
 
             PARES.forEach(par => {
-                const cleanId = par.replace('/', '');
-                
+                const cleanId = par.replace('/', '_');
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.id = `card-${cleanId}`;
                 card.innerHTML = `
                     <div class="card-header">
                         <span>${par}</span>
-                        <span class="status-tag" id="status-${cleanId}">Cargando...</span>
+                        <span class="status-tag" id="status-${cleanId}">Conectando...</span>
                     </div>
                     <div class="chart-container" id="chart-${cleanId}"></div>
                 `;
                 container.appendChild(card);
-
-                const chart = LightweightCharts.createChart(document.getElementById(`chart-${cleanId}`), {
-                    layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
-                    grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
-                    timeScale: { timeVisible: true, secondsVisible: false }
-                });
-
-                const candlestickSeries = chart.addCandlestickSeries({
-                    upColor: '#26a69a', downColor: '#ef5350',
-                    borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-                    wickUpColor: '#26a69a', wickDownColor: '#ef5350'
-                });
-
-                charts[par] = chart;
-                series[par] = candlestickSeries;
             });
         }
 
-        initDashboard();
+        // PASO 2: Inicializar gráficos sobre cada contenedor existente
+        function initCharts() {
+            PARES.forEach(par => {
+                const cleanId = par.replace('/', '_');
+                const chartElement = document.getElementById(`chart-${cleanId}`);
+                
+                if (chartElement && typeof LightweightCharts !== 'undefined') {
+                    try {
+                        const chart = LightweightCharts.createChart(chartElement, {
+                            layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
+                            grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
+                            timeScale: { timeVisible: true, secondsVisible: false }
+                        });
 
+                        const candlestickSeries = chart.addCandlestickSeries({
+                            upColor: '#26a69a', downColor: '#ef5350',
+                            borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+                            wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+                        });
+
+                        charts[par] = chart;
+                        series[par] = candlestickSeries;
+                    } catch (e) {
+                        console.error(`Error al crear gráfico para ${par}:`, e);
+                    }
+                }
+            });
+        }
+
+        // Ejecutar montaje en orden
+        initDOM();
+        setTimeout(initCharts, 200);
+
+        // PASO 3: Recepción de datos en tiempo real mediante WebSocket
         const socket = io();
 
         function updateParData(par, info) {
-            if (!charts[par]) return;
+            if (!series[par]) return;
 
-            const cleanId = par.replace('/', '');
+            const cleanId = par.replace('/', '_');
 
-            const formattedCandles = info.candles.map(c => ({
-                time: new Date(c.time).getTime() / 1000,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close
-            }));
+            if (info.candles && info.candles.length > 0) {
+                const formattedCandles = info.candles.map(c => ({
+                    time: Math.floor(new Date(c.time).getTime() / 1000),
+                    open: c.open,
+                    high: c.high,
+                    low: c.low,
+                    close: c.close
+                }));
 
-            series[par].setData(formattedCandles);
+                series[par].setData(formattedCandles);
+            }
 
             const cardElement = document.getElementById(`card-${cleanId}`);
             const statusElement = document.getElementById(`status-${cleanId}`);
 
-            cardElement.classList.remove('barrido-top', 'barrido-bottom');
-            
-            if (info.barrido_high) {
-                cardElement.classList.add('barrido-top');
-                statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
-                statusElement.style.color = "#ff5252";
-            } else if (info.barrido_low) {
-                cardElement.classList.add('barrido-bottom');
-                statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
-                statusElement.style.color = "#00e676";
-            } else {
-                statusElement.innerHTML = "Monitoreando";
-                statusElement.style.color = "#888";
+            if (cardElement && statusElement) {
+                cardElement.classList.remove('barrido-top', 'barrido-bottom');
+                
+                if (info.barrido_high) {
+                    cardElement.classList.add('barrido-top');
+                    statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
+                    statusElement.style.color = "#ff5252";
+                } else if (info.barrido_low) {
+                    cardElement.classList.add('barrido-bottom');
+                    statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
+                    statusElement.style.color = "#00e676";
+                } else {
+                    statusElement.innerHTML = "Monitoreando";
+                    statusElement.style.color = "#888";
+                }
             }
         }
 
