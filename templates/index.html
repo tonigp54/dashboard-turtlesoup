@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Turtle Soup - 20 Pares H4</title>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <title>Dashboard Turtle Soup - Matriz 20 Pares</title>
     <style>
         body {
             background-color: #12151e;
@@ -13,49 +11,51 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 15px;
         }
-        h1 { text-align: center; color: #4e92df; margin-bottom: 20px; font-size: 1.6em; }
-        
+        h1 { 
+            text-align: center; 
+            color: #4e92df; 
+            margin-bottom: 20px; 
+            font-size: 1.6em;
+        }
+
+        /* MATRIZ FIJA DE 5 COLUMNAS */
         .grid-container {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 12px;
+            gap: 10px;
             width: 100%;
         }
 
-        @media (max-width: 1200px) { .grid-container { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 768px) { .grid-container { grid-template-columns: repeat(1, 1fr); } }
+        @media (max-width: 1400px) { .grid-container { grid-template-columns: repeat(4, 1fr); } }
+        @media (max-width: 1100px) { .grid-container { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px)  { .grid-container { grid-template-columns: repeat(1, 1fr); } }
 
         .card {
             background: #1e222d;
             border-radius: 8px;
-            padding: 8px;
+            padding: 5px;
             border: 2px solid #2a2e39;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
+            height: 220px;
         }
-        .card.barrido-top { border-color: #ff5252; animation: blink 1s infinite; }
-        .card.barrido-bottom { border-color: #00e676; animation: blink 1s infinite; }
-        @keyframes blink { 50% { border-color: transparent; } }
 
         .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
-            font-size: 0.95em;
-            margin-bottom: 6px;
-            padding-bottom: 4px;
+            font-size: 0.85em;
+            padding: 4px 6px;
             border-bottom: 1px solid #2a2e39;
+            margin-bottom: 4px;
         }
-        .status-tag {
-            font-size: 0.75em;
-            padding: 2px 5px;
-            border-radius: 4px;
-            background: #2a2e39;
-            color: #888;
+
+        .tradingview-widget-container {
+            width: 100%;
+            height: 100%;
         }
-        .chart-container { height: 150px; width: 100%; }
     </style>
 </head>
 <body>
@@ -63,118 +63,68 @@
     <h1>🐢 DASHBOARD TURTLE SOUP (MATRIZ 20 PARES H4)</h1>
     <div class="grid-container" id="dashboard"></div>
 
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     <script>
         const PARES = [
-            "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "NZD/USD", "USD/CAD", "USD/CHF",
-            "EUR/GBP", "EUR/JPY", "GBP/JPY", "EUR/CAD", "AUD/JPY", "GBP/AUD", "EUR/AUD",
-            "USD/MXN", "USD/ZAR", "USD/NOK", "USD/SEK", "USD/TRY", "USD/SGD"
+            { nombre: "EUR/USD", symbol: "FX:EURUSD" },
+            { nombre: "GBP/USD", symbol: "FX:GBPUSD" },
+            { nombre: "USD/JPY", symbol: "FX:USDJPY" },
+            { nombre: "AUD/USD", symbol: "FX:AUDUSD" },
+            { nombre: "NZD/USD", symbol: "FX:NZDUSD" },
+            { nombre: "USD/CAD", symbol: "FX:USDCAD" },
+            { nombre: "USD/CHF", symbol: "FX:USDCHF" },
+            { nombre: "EUR/GBP", symbol: "FX:EURGBP" },
+            { nombre: "EUR/JPY", symbol: "FX:EURJPY" },
+            { nombre: "GBP/JPY", symbol: "FX:GBPJPY" },
+            { nombre: "EUR/CAD", symbol: "FX:EURCAD" },
+            { nombre: "AUD/JPY", symbol: "FX:AUDJPY" },
+            { nombre: "GBP/AUD", symbol: "FX:GBPAUD" },
+            { nombre: "EUR/AUD", symbol: "FX:EURAUD" },
+            { nombre: "USD/MXN", symbol: "FX:USDMXN" },
+            { nombre: "USD/ZAR", symbol: "FX:USDZAR" },
+            { nombre: "USD/NOK", symbol: "FX:USDNOK" },
+            { nombre: "USD/SEK", symbol: "FX:USDSEK" },
+            { nombre: "USD/TRY", symbol: "FX:USDTRY" },
+            { nombre: "USD/SGD", symbol: "FX:USDSGD" }
         ];
 
-        const charts = {};
-        const series = {};
-
-        function initDOM() {
+        function initDashboard() {
             const container = document.getElementById('dashboard');
             container.innerHTML = '';
 
-            PARES.forEach(par => {
-                const cleanId = par.replace('/', '_');
+            PARES.forEach((par, index) => {
+                const containerId = `tv_chart_${index}`;
                 const card = document.createElement('div');
                 card.className = 'card';
-                card.id = `card-${cleanId}`;
                 card.innerHTML = `
                     <div class="card-header">
-                        <span>${par}</span>
-                        <span class="status-tag" id="status-${cleanId}">Conectando...</span>
+                        <span>${par.nombre}</span>
+                        <span style="color:#4e92df; font-size:0.8em;">H4</span>
                     </div>
-                    <div class="chart-container" id="chart-${cleanId}"></div>
+                    <div id="${containerId}" class="tradingview-widget-container"></div>
                 `;
                 container.appendChild(card);
+
+                // Carga directa del widget nativo de TradingView
+                new TradingView.widget({
+                    "autosize": true,
+                    "symbol": par.symbol,
+                    "interval": "240", // 240 minutos = 4 Horas (H4)
+                    "timezone": "Etc/UTC",
+                    "theme": "dark",
+                    "style": "1", // Velas japonesas
+                    "locale": "es",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
+                    "hide_top_toolbar": true,
+                    "hide_legend": true,
+                    "save_image": false,
+                    "container_id": containerId
+                });
             });
         }
 
-        function initCharts() {
-            PARES.forEach(par => {
-                const cleanId = par.replace('/', '_');
-                const chartElement = document.getElementById(`chart-${cleanId}`);
-                
-                if (chartElement && typeof LightweightCharts !== 'undefined') {
-                    try {
-                        const chart = LightweightCharts.createChart(chartElement, {
-                            layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
-                            grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
-                            timeScale: { timeVisible: true, secondsVisible: false }
-                        });
-
-                        const candlestickSeries = chart.addCandlestickSeries({
-                            upColor: '#26a69a', downColor: '#ef5350',
-                            borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-                            wickUpColor: '#26a69a', wickDownColor: '#ef5350'
-                        });
-
-                        charts[par] = chart;
-                        series[par] = candlestickSeries;
-                    } catch (e) {
-                        console.error(`Error ${par}:`, e);
-                    }
-                }
-            });
-        }
-
-        initDOM();
-        setTimeout(initCharts, 200);
-
-        const socket = io();
-
-        function updateParData(par, info) {
-            if (!series[par]) return;
-
-            const cleanId = par.replace('/', '_');
-
-            if (info.candles && info.candles.length > 0) {
-                const formattedCandles = info.candles.map(c => ({
-                    time: c.time,
-                    open: c.open,
-                    high: c.high,
-                    low: c.low,
-                    close: c.close
-                }));
-
-                series[par].setData(formattedCandles);
-            }
-
-            const cardElement = document.getElementById(`card-${cleanId}`);
-            const statusElement = document.getElementById(`status-${cleanId}`);
-
-            if (cardElement && statusElement) {
-                cardElement.classList.remove('barrido-top', 'barrido-bottom');
-                
-                if (info.barrido_high) {
-                    cardElement.classList.add('barrido-top');
-                    statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
-                    statusElement.style.color = "#ff5252";
-                } else if (info.barrido_low) {
-                    cardElement.classList.add('barrido-bottom');
-                    statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
-                    statusElement.style.color = "#00e676";
-                } else {
-                    statusElement.innerHTML = "Monitoreando";
-                    statusElement.style.color = "#888";
-                }
-            }
-        }
-
-        socket.on('update_single', (data) => {
-            for (const [par, info] of Object.entries(data)) {
-                updateParData(par, info);
-            }
-        });
-
-        socket.on('update_all', (data) => {
-            for (const [par, info] of Object.entries(data)) {
-                updateParData(par, info);
-            }
-        });
+        window.onload = initDashboard;
     </script>
 </body>
 </html>
