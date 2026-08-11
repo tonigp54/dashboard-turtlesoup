@@ -9,9 +9,8 @@ import requests
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# MAPEO COMPLETO DE LOS 20 PARES CON SUS TICKERS DE YAHOO FINANCE
 PARES_MAP = {
-    # 1. Mayores (Majors)
+    # 1. Mayores
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
     "USD/JPY": "JPY=X",
@@ -20,7 +19,7 @@ PARES_MAP = {
     "USD/CAD": "CAD=X",
     "USD/CHF": "CHF=X",
     
-    # 2. Menores / Cruzados (Crosses)
+    # 2. Menores / Cruzados
     "EUR/GBP": "EURGBP=X",
     "EUR/JPY": "EURJPY=X",
     "GBP/JPY": "GBPJPY=X",
@@ -29,7 +28,7 @@ PARES_MAP = {
     "GBP/AUD": "GBPAUD=X",
     "EUR/AUD": "EURAUD=X",
     
-    # 3. Exóticos (Exotics)
+    # 3. Exóticos
     "USD/MXN": "MXN=X",
     "USD/ZAR": "ZAR=X",
     "USD/NOK": "NOK=X",
@@ -51,91 +50,80 @@ def enviar_telegram(mensaje):
         try:
             requests.post(url, data=data, timeout=5)
         except Exception as e:
-            print(f"Error enviado Telegram: {e}")
+            print(f"Error Telegram: {e}")
 
-def actualizar_todos_los_pares():
-    symbols = list(PARES_MAP.values())
+def actualizar_par_individual(par_nombre, ticker):
     try:
-        # Descarga masiva e instantánea de los 20 pares (velas H4 de los últimos 7 días)
-        data = yf.download(tickers=symbols, period="7d", interval="1h", progress=False)
+        # Petición individual rápida por par a Yahoo Finance
+        df_par = yf.Ticker(ticker).history(period="7d", interval="1h")
+        
+        if len(df_par) < 8:
+            return
 
-        for par_nombre, ticker in PARES_MAP.items():
-            try:
-                # Extraer serie temporal del ticker
-                if len(symbols) > 1:
-                    df_par = data.xs(ticker, level=1, axis=1).dropna()
-                else:
-                    df_par = data.dropna()
+        # Reagrupar datos de 1 hora en velas H4
+        df_h4 = df_par.resample('4h').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last'
+        }).dropna()
 
-                if len(df_par) < 8:
-                    continue
+        ultimas = df_h4.tail(6)
+        candles = []
+        for idx, row in ultimas.iterrows():
+            candles.append({
+                'time': str(idx),
+                'open': float(row['Open']),
+                'high': float(row['High']),
+                'low': float(row['Low']),
+                'close': float(row['Close'])
+            })
 
-                # Reagrupar datos de 1 hora en bloques de 4 horas (H4)
-                df_h4 = df_par.resample('4h').agg({
-                    'Open': 'first',
-                    'High': 'max',
-                    'Low': 'min',
-                    'Close': 'last'
-                }).dropna()
+        if len(candles) < 2:
+            return
 
-                ultimas = df_h4.tail(6)
-                candles = []
-                for idx, row in ultimas.iterrows():
-                    candles.append({
-                        'time': str(idx),
-                        'open': float(row['Open']),
-                        'high': float(row['High']),
-                        'low': float(row['Low']),
-                        'close': float(row['Close'])
-                    })
+        vela_ref = candles[-2]
+        max_ref = vela_ref['high']
+        min_ref = vela_ref['low']
 
-                if len(candles) < 2:
-                    continue
+        precio_act = candles[-1]['close']
+        high_act = candles[-1]['high']
+        low_act = candles[-1]['low']
 
-                # Vela H4 cerrada previa (Nivel de Liquidez)
-                vela_ref = candles[-2]
-                max_ref = vela_ref['high']
-                min_ref = vela_ref['low']
+        barrido_high = high_act > max_ref
+        barrido_low = low_act < min_ref
 
-                precio_act = candles[-1]['close']
-                high_act = candles[-1]['high']
-                low_act = candles[-1]['low']
+        # Alertas de Telegram
+        if barrido_high and not alerta_enviada[par_nombre]:
+            enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Máximo H4 Ref:</b> {max_ref}\n🔥 <b>Precio:</b> {precio_act}")
+            alerta_enviada[par_nombre] = True
+        elif barrido_low and not alerta_enviada[par_nombre]:
+            enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Mínimo H4 Ref:</b> {min_ref}\n🔥 <b>Precio:</b> {precio_act}")
+            alerta_enviada[par_nombre] = True
 
-                barrido_high = high_act > max_ref
-                barrido_low = low_act < min_ref
+        if not barrido_high and not barrido_low:
+            alerta_enviada[par_nombre] = False
 
-                # Notificaciones Telegram
-                if barrido_high and not alerta_enviada[par_nombre]:
-                    enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4 (Turtle Soup Corto)</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Máximo H4 Ref:</b> {max_ref}\n🔥 <b>Precio Actual:</b> {precio_act}")
-                    alerta_enviada[par_nombre] = True
-                elif barrido_low and not alerta_enviada[par_nombre]:
-                    enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4 (Turtle Soup Largo)</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Mínimo H4 Ref:</b> {min_ref}\n🔥 <b>Precio Actual:</b> {precio_act}")
-                    alerta_enviada[par_nombre] = True
+        info = {
+            'candles': candles,
+            'max_h4': max_ref,
+            'min_h4': min_ref,
+            'barrido_high': barrido_high,
+            'barrido_low': barrido_low
+        }
+        
+        datos_cache[par_nombre] = info
+        socketio.emit('update_single', {par_nombre: info})
 
-                if not barrido_high and not barrido_low:
-                    alerta_enviada[par_nombre] = False
-
-                info = {
-                    'candles': candles,
-                    'max_h4': max_ref,
-                    'min_h4': min_ref,
-                    'barrido_high': barrido_high,
-                    'barrido_low': barrido_low
-                }
-                
-                datos_cache[par_nombre] = info
-                socketio.emit('update_single', {par_nombre: info})
-
-            except Exception as ex:
-                print(f"Error en {par_nombre}: {ex}")
-
-    except Exception as e:
-        print(f"Error en descarga masiva Yahoo: {e}")
+    except Exception as ex:
+        print(f"Error procesando {par_nombre}: {ex}")
 
 def bucle_monitoreo():
     while True:
-        actualizar_todos_los_pares()
-        time.sleep(20) # Revisa el mercado completo cada 20 segundos
+        for par_nombre, ticker in PARES_MAP.items():
+            actualizar_par_individual(par_nombre, ticker)
+            time.sleep(0.5) # Pequeña pausa fluida de medio segundo entre pares
+        time.sleep(10)
 
 @app.route('/')
 def index():
