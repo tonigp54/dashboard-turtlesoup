@@ -9,18 +9,33 @@ import requests
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Mapeo de pares a formato Yahoo Finance (ej: EURUSD=X)
+# MAPEO COMPLETO DE LOS 20 PARES CON SUS TICKERS DE YAHOO FINANCE
 PARES_MAP = {
+    # 1. Mayores (Majors)
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
     "USD/JPY": "JPY=X",
     "AUD/USD": "AUDUSD=X",
+    "NZD/USD": "NZDUSD=X",
     "USD/CAD": "CAD=X",
     "USD/CHF": "CHF=X",
+    
+    # 2. Menores / Cruzados (Crosses)
     "EUR/GBP": "EURGBP=X",
     "EUR/JPY": "EURJPY=X",
     "GBP/JPY": "GBPJPY=X",
-    "EUR/CAD": "EURCAD=X"
+    "EUR/CAD": "EURCAD=X",
+    "AUD/JPY": "AUDJPY=X",
+    "GBP/AUD": "GBPAUD=X",
+    "EUR/AUD": "EURAUD=X",
+    
+    # 3. Exóticos (Exotics)
+    "USD/MXN": "MXN=X",
+    "USD/ZAR": "ZAR=X",
+    "USD/NOK": "NOK=X",
+    "USD/SEK": "SEK=X",
+    "USD/TRY": "TRY=X",
+    "USD/SGD": "SGD=X"
 }
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -36,22 +51,34 @@ def enviar_telegram(mensaje):
         try:
             requests.post(url, data=data, timeout=5)
         except Exception as e:
-            print(f"Error Telegram: {e}")
+            print(f"Error enviado Telegram: {e}")
 
 def actualizar_todos_los_pares():
     symbols = list(PARES_MAP.values())
     try:
-        # Descarga masiva e instantánea de los 10 pares a la vez (intervalo 1h o 1d)
-        data = yf.download(tickers=symbols, period="5d", interval="1h", progress=False)
+        # Descarga masiva e instantánea de los 20 pares (velas H4 de los últimos 7 días)
+        data = yf.download(tickers=symbols, period="7d", interval="1h", progress=False)
 
         for par_nombre, ticker in PARES_MAP.items():
             try:
-                df_par = data.xs(ticker, level=1, axis=1).dropna() if len(symbols) > 1 else data.dropna()
-                if len(df_par) < 5:
+                # Extraer serie temporal del ticker
+                if len(symbols) > 1:
+                    df_par = data.xs(ticker, level=1, axis=1).dropna()
+                else:
+                    df_par = data.dropna()
+
+                if len(df_par) < 8:
                     continue
 
-                # Extraer las últimas 5 velas
-                ultimas = df_par.tail(5)
+                # Reagrupar datos de 1 hora en bloques de 4 horas (H4)
+                df_h4 = df_par.resample('4h').agg({
+                    'Open': 'first',
+                    'High': 'max',
+                    'Low': 'min',
+                    'Close': 'last'
+                }).dropna()
+
+                ultimas = df_h4.tail(6)
                 candles = []
                 for idx, row in ultimas.iterrows():
                     candles.append({
@@ -62,7 +89,10 @@ def actualizar_todos_los_pares():
                         'close': float(row['Close'])
                     })
 
-                # Regla Turtle Soup: Referencia vela previa
+                if len(candles) < 2:
+                    continue
+
+                # Vela H4 cerrada previa (Nivel de Liquidez)
                 vela_ref = candles[-2]
                 max_ref = vela_ref['high']
                 min_ref = vela_ref['low']
@@ -76,10 +106,10 @@ def actualizar_todos_los_pares():
 
                 # Notificaciones Telegram
                 if barrido_high and not alerta_enviada[par_nombre]:
-                    enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO (Turtle Soup Corto)</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Nivel H4:</b> {max_ref}\n🔥 <b>Precio:</b> {precio_act}")
+                    enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4 (Turtle Soup Corto)</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Máximo H4 Ref:</b> {max_ref}\n🔥 <b>Precio Actual:</b> {precio_act}")
                     alerta_enviada[par_nombre] = True
                 elif barrido_low and not alerta_enviada[par_nombre]:
-                    enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO (Turtle Soup Largo)</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Nivel H4:</b> {min_ref}\n🔥 <b>Precio:</b> {precio_act}")
+                    enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4 (Turtle Soup Largo)</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Mínimo H4 Ref:</b> {min_ref}\n🔥 <b>Precio Actual:</b> {precio_act}")
                     alerta_enviada[par_nombre] = True
 
                 if not barrido_high and not barrido_low:
@@ -97,7 +127,7 @@ def actualizar_todos_los_pares():
                 socketio.emit('update_single', {par_nombre: info})
 
             except Exception as ex:
-                print(f"Error parseando {par_nombre}: {ex}")
+                print(f"Error en {par_nombre}: {ex}")
 
     except Exception as e:
         print(f"Error en descarga masiva Yahoo: {e}")
@@ -105,7 +135,7 @@ def actualizar_todos_los_pares():
 def bucle_monitoreo():
     while True:
         actualizar_todos_los_pares()
-        time.sleep(15) # Revisa el mercado completo cada 15 segundos
+        time.sleep(20) # Revisa el mercado completo cada 20 segundos
 
 @app.route('/')
 def index():
