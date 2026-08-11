@@ -15,7 +15,7 @@
         h1 { text-align: center; color: #4e92df; margin-bottom: 20px; }
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 15px;
         }
         .card {
@@ -49,57 +49,77 @@
         const charts = {};
         const series = {};
 
-        socket.on('update_data', (data) => {
+        function renderPar(par, info) {
             const container = document.getElementById('dashboard');
+            const cleanId = par.replace('/', '');
 
+            if (!charts[par]) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.id = `card-${cleanId}`;
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span>${par}</span>
+                        <span id="status-${cleanId}" style="font-size: 0.8em; color: #888;">Monitoreando...</span>
+                    </div>
+                    <div class="chart-container" id="chart-${cleanId}"></div>
+                `;
+                container.appendChild(card);
+
+                const chart = LightweightCharts.createChart(document.getElementById(`chart-${cleanId}`), {
+                    layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
+                    grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
+                    timeScale: { timeVisible: true, secondsVisible: false }
+                });
+
+                const candlestickSeries = chart.addCandlestickSeries({
+                    upColor: '#26a69a', downColor: '#ef5350',
+                    borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+                    wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+                });
+
+                charts[par] = chart;
+                series[par] = candlestickSeries;
+            }
+
+            // Convertir fechas a timestamps para TradingView
+            const formattedCandles = info.candles.map(c => ({
+                time: new Date(c.time).getTime() / 1000,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close
+            }));
+
+            series[par].setData(formattedCandles);
+
+            const cardElement = document.getElementById(`card-${cleanId}`);
+            const statusElement = document.getElementById(`status-${cleanId}`);
+
+            cardElement.classList.remove('barrido-top', 'barrido-bottom');
+            if (info.barrido_high) {
+                cardElement.classList.add('barrido-top');
+                statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
+                statusElement.style.color = "#ff5252";
+            } else if (info.barrido_low) {
+                cardElement.classList.add('barrido-bottom');
+                statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
+                statusElement.style.color = "#00e676";
+            } else {
+                statusElement.innerHTML = "Normal";
+                statusElement.style.color = "#888";
+            }
+        }
+
+        socket.on('update_single', (data) => {
             for (const [par, info] of Object.entries(data)) {
-                if (!charts[par]) {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.id = `card-${par.replace('/', '')}`;
-                    card.innerHTML = `
-                        <div class="card-header">
-                            <span>${par}</span>
-                            <span id="status-${par.replace('/', '')}" style="font-size: 0.8em; color: #888;">Cargando...</span>
-                        </div>
-                        <div class="chart-container" id="chart-${par.replace('/', '')}"></div>
-                    `;
-                    container.appendChild(card);
+                renderPar(par, info);
+            }
+        });
 
-                    const chart = LightweightCharts.createChart(document.getElementById(`chart-${par.replace('/', '')}`), {
-                        layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
-                        grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
-                        timeScale: { timeVisible: true, secondsVisible: false }
-                    });
-
-                    const candlestickSeries = chart.addCandlestickSeries({
-                        upColor: '#26a69a', downColor: '#ef5350',
-                        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-                        wickUpColor: '#26a69a', wickDownColor: '#ef5350'
-                    });
-
-                    charts[par] = chart;
-                    series[par] = candlestickSeries;
-                }
-
-                series[par].setData(info.candles);
-
-                const cardElement = document.getElementById(`card-${par.replace('/', '')}`);
-                const statusElement = document.getElementById(`status-${par.replace('/', '')}`);
-
-                cardElement.classList.remove('barrido-top', 'barrido-bottom');
-                if (info.barrido_high) {
-                    cardElement.classList.add('barrido-top');
-                    statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
-                    statusElement.style.color = "#ff5252";
-                } else if (info.barrido_low) {
-                    cardElement.classList.add('barrido-bottom');
-                    statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
-                    statusElement.style.color = "#00e676";
-                } else {
-                    statusElement.innerHTML = "Monitoreando";
-                    statusElement.style.color = "#888";
-                }
+        socket.on('update_all', (data) => {
+            for (const [par, info] of Object.entries(data)) {
+                renderPar(par, info);
             }
         });
     </script>
