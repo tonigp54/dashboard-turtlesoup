@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Turtle Soup - En Vivo</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
@@ -15,7 +16,7 @@
         h1 { text-align: center; color: #4e92df; margin-bottom: 20px; }
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 15px;
         }
         .card {
@@ -24,6 +25,7 @@
             padding: 10px;
             border: 2px solid #2a2e39;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: border-color 0.3s ease;
         }
         .card.barrido-top { border-color: #ff5252; animation: blink 1s infinite; }
         .card.barrido-bottom { border-color: #00e676; animation: blink 1s infinite; }
@@ -35,6 +37,15 @@
             font-weight: bold;
             font-size: 1.1em;
             margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #2a2e39;
+        }
+        .status-tag {
+            font-size: 0.8em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #2a2e39;
+            color: #888;
         }
         .chart-container { height: 180px; width: 100%; }
     </style>
@@ -45,27 +56,35 @@
     <div class="grid-container" id="dashboard"></div>
 
     <script>
-        const socket = io();
+        const PARES = [
+            "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
+            "USD/CHF", "EUR/GBP", "EUR/JPY", "GBP/JPY", "EUR/CAD"
+        ];
+
         const charts = {};
         const series = {};
 
-        function renderPar(par, info) {
+        // 1. Inicializar las tarjetas de todos los pares de forma inmediata
+        function initDashboard() {
             const container = document.getElementById('dashboard');
-            const cleanId = par.replace('/', '');
 
-            if (!charts[par]) {
+            PARES.forEach(par => {
+                const cleanId = par.replace('/', '');
+                
+                // Crear estructura HTML de la tarjeta
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.id = `card-${cleanId}`;
                 card.innerHTML = `
                     <div class="card-header">
                         <span>${par}</span>
-                        <span id="status-${cleanId}" style="font-size: 0.8em; color: #888;">Monitoreando...</span>
+                        <span class="status-tag" id="status-${cleanId}">Esperando API...</span>
                     </div>
                     <div class="chart-container" id="chart-${cleanId}"></div>
                 `;
                 container.appendChild(card);
 
+                // Crear el lienzo del gráfico de TradingView
                 const chart = LightweightCharts.createChart(document.getElementById(`chart-${cleanId}`), {
                     layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
                     grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
@@ -80,9 +99,21 @@
 
                 charts[par] = chart;
                 series[par] = candlestickSeries;
-            }
+            });
+        }
 
-            // Convertir fechas a timestamps para TradingView
+        // Ejecutar inicialización de la interfaz
+        initDashboard();
+
+        // 2. Escuchar actualizaciones en tiempo real
+        const socket = io();
+
+        function updateParData(par, info) {
+            if (!charts[par]) return;
+
+            const cleanId = par.replace('/', '');
+
+            // Formatear las velas
             const formattedCandles = info.candles.map(c => ({
                 time: new Date(c.time).getTime() / 1000,
                 open: c.open,
@@ -97,6 +128,7 @@
             const statusElement = document.getElementById(`status-${cleanId}`);
 
             cardElement.classList.remove('barrido-top', 'barrido-bottom');
+            
             if (info.barrido_high) {
                 cardElement.classList.add('barrido-top');
                 statusElement.innerHTML = "🚨 BARRIDO MÁXIMO";
@@ -113,13 +145,13 @@
 
         socket.on('update_single', (data) => {
             for (const [par, info] of Object.entries(data)) {
-                renderPar(par, info);
+                updateParData(par, info);
             }
         });
 
         socket.on('update_all', (data) => {
             for (const [par, info] of Object.entries(data)) {
-                renderPar(par, info);
+                updateParData(par, info);
             }
         });
     </script>
