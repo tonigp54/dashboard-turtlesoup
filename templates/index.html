@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Turtle Soup - En Vivo</title>
+    <title>Dashboard Turtle Soup - 20 Pares H4</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
@@ -35,7 +35,7 @@
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
-            font-size: 1.1em;
+            font-size: 1.05em;
             margin-bottom: 8px;
             padding-bottom: 5px;
             border-bottom: 1px solid #2a2e39;
@@ -47,44 +47,42 @@
             background: #2a2e39;
             color: #888;
         }
-        .chart-container { height: 180px; width: 100%; }
+        .chart-container { height: 170px; width: 100%; }
     </style>
 </head>
 <body>
 
-    <h1>🐢 DASHBOARD TURTLE SOUP (H4 EN VIVO)</h1>
+    <h1>🐢 DASHBOARD TURTLE SOUP (20 PARES H4 EN VIVO)</h1>
     <div class="grid-container" id="dashboard"></div>
 
     <script>
         const PARES = [
-            "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
-            "USD/CHF", "EUR/GBP", "EUR/JPY", "GBP/JPY", "EUR/CAD"
+            "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "NZD/USD", "USD/CAD", "USD/CHF",
+            "EUR/GBP", "EUR/JPY", "GBP/JPY", "EUR/CAD", "AUD/JPY", "GBP/AUD", "EUR/AUD",
+            "USD/MXN", "USD/ZAR", "USD/NOK", "USD/SEK", "USD/TRY", "USD/SGD"
         ];
 
         const charts = {};
         const series = {};
 
-        // 1. Inicializar las tarjetas de todos los pares de forma inmediata
         function initDashboard() {
             const container = document.getElementById('dashboard');
 
             PARES.forEach(par => {
                 const cleanId = par.replace('/', '');
                 
-                // Crear estructura HTML de la tarjeta
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.id = `card-${cleanId}`;
                 card.innerHTML = `
                     <div class="card-header">
                         <span>${par}</span>
-                        <span class="status-tag" id="status-${cleanId}">Esperando API...</span>
+                        <span class="status-tag" id="status-${cleanId}">Cargando...</span>
                     </div>
                     <div class="chart-container" id="chart-${cleanId}"></div>
                 `;
                 container.appendChild(card);
 
-                // Crear el lienzo del gráfico de TradingView
                 const chart = LightweightCharts.createChart(document.getElementById(`chart-${cleanId}`), {
                     layout: { backgroundColor: '#1e222d', textColor: '#d1d4dc' },
                     grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
@@ -102,10 +100,8 @@
             });
         }
 
-        // Ejecutar inicialización de la interfaz
         initDashboard();
 
-        // 2. Escuchar actualizaciones en tiempo real
         const socket = io();
 
         function updateParData(par, info) {
@@ -113,7 +109,6 @@
 
             const cleanId = par.replace('/', '');
 
-            // Formatear las velas
             const formattedCandles = info.candles.map(c => ({
                 time: new Date(c.time).getTime() / 1000,
                 open: c.open,
@@ -138,7 +133,7 @@
                 statusElement.innerHTML = "🚨 BARRIDO MÍNIMO";
                 statusElement.style.color = "#00e676";
             } else {
-                statusElement.innerHTML = "Normal";
+                statusElement.innerHTML = "Monitoreando";
                 statusElement.style.color = "#888";
             }
         }
