@@ -1,6 +1,7 @@
 import os
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import yfinance as yf
 from flask import Flask, render_template
 from flask_socketio import SocketIO
@@ -52,15 +53,17 @@ def enviar_telegram(mensaje):
         except Exception as e:
             print(f"Error Telegram: {e}")
 
-def actualizar_par_individual(par_nombre, ticker):
+def obtener_datos_par(item):
+    par_nombre, ticker = item
     try:
-        # Petición individual rápida por par a Yahoo Finance
-        df_par = yf.Ticker(ticker).history(period="7d", interval="1h")
+        # Petición rápida de datos
+        t = yf.Ticker(ticker)
+        df_par = t.history(period="5d", interval="1h")
         
         if len(df_par) < 8:
-            return
+            return None
 
-        # Reagrupar datos de 1 hora en velas H4
+        # Reagrupar a H4
         df_h4 = df_par.resample('4h').agg({
             'Open': 'first',
             'High': 'max',
@@ -80,7 +83,7 @@ def actualizar_par_individual(par_nombre, ticker):
             })
 
         if len(candles) < 2:
-            return
+            return None
 
         vela_ref = candles[-2]
         max_ref = vela_ref['high']
@@ -93,12 +96,12 @@ def actualizar_par_individual(par_nombre, ticker):
         barrido_high = high_act > max_ref
         barrido_low = low_act < min_ref
 
-        # Alertas de Telegram
+        # Alertas Telegram
         if barrido_high and not alerta_enviada[par_nombre]:
-            enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Máximo H4 Ref:</b> {max_ref}\n🔥 <b>Precio:</b> {precio_act}")
+            enviar_telegram(f"🚨 <b>BARRIDO MÁXIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📈 <b>Máximo Ref:</b> {max_ref}\n🔥 <b>Precio:</b> {precio_act}")
             alerta_enviada[par_nombre] = True
         elif barrido_low and not alerta_enviada[par_nombre]:
-            enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Mínimo H4 Ref:</b> {min_ref}\n🔥 <b>Precio:</b> {precio_act}")
+            enviar_telegram(f"🚨 <b>BARRIDO MÍNIMO H4</b>\n📌 <b>Par:</b> {par_nombre}\n📉 <b>Mínimo Ref:</b> {min_ref}\n🔥 <b>Precio:</b> {precio_act}")
             alerta_enviada[par_nombre] = True
 
         if not barrido_high and not barrido_low:
@@ -111,19 +114,24 @@ def actualizar_par_individual(par_nombre, ticker):
             'barrido_high': barrido_high,
             'barrido_low': barrido_low
         }
-        
-        datos_cache[par_nombre] = info
-        socketio.emit('update_single', {par_nombre: info})
+
+        return par_nombre, info
 
     except Exception as ex:
-        print(f"Error procesando {par_nombre}: {ex}")
+        return None
 
 def bucle_monitoreo():
     while True:
-        for par_nombre, ticker in PARES_MAP.items():
-            actualizar_par_individual(par_nombre, ticker)
-            time.sleep(0.5) # Pequeña pausa fluida de medio segundo entre pares
-        time.sleep(10)
+        # Ejecución multihilo: descarga los 20 pares en paralelo simultáneamente
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            resultados = executor.map(obtener_datos_par, PARES_MAP.items())
+            for res in resultados:
+                if res:
+                    par_nombre, info = res
+                    datos_cache[par_nombre] = info
+                    socketio.emit('update_single', {par_nombre: info})
+
+        time.sleep(15) # Refresca el mercado completo cada 15 segundos
 
 @app.route('/')
 def index():
