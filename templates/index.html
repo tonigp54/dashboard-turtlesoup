@@ -12,6 +12,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 15px;
         }
+
         h1 { 
             text-align: center; 
             color: #131722; 
@@ -44,12 +45,24 @@
             transition: border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
-        /* BARRIDOS CON PARPADEO EN BORDES CLAROS */
-        .card.barrido-top { border-color: #ff5252; animation: blink-red 1s infinite; }
-        .card.barrido-bottom { border-color: #26a69a; animation: blink-green 1s infinite; }
+        /* RESALTADO BARRIDO BAJISTA (MÁXIMO) -> BORDER ROJO PARPADEANTE */
+        .card.barrido-top { 
+            border-color: #ff5252; 
+            animation: blink-red 1s infinite; 
+        }
 
-        @keyframes blink-red { 50% { border-color: transparent; box-shadow: 0 0 12px rgba(255, 82, 82, 0.6); } }
-        @keyframes blink-green { 50% { border-color: transparent; box-shadow: 0 0 12px rgba(38, 166, 154, 0.6); } }
+        /* RESALTADO BARRIDO ALCISTA (MÍNIMO) -> BORDER VERDE PARPADEANTE */
+        .card.barrido-bottom { 
+            border-color: #26a69a; 
+            animation: blink-green 1s infinite; 
+        }
+
+        @keyframes blink-red { 
+            50% { border-color: transparent; box-shadow: 0 0 12px rgba(255, 82, 82, 0.6); } 
+        }
+        @keyframes blink-green { 
+            50% { border-color: transparent; box-shadow: 0 0 12px rgba(38, 166, 154, 0.6); } 
+        }
 
         .card-header {
             display: flex;
@@ -131,7 +144,7 @@
                     "symbol": par.symbol,
                     "interval": "240", // 4 Horas (H4)
                     "timezone": "Etc/UTC",
-                    "theme": "light", // Tema Claro
+                    "theme": "light",
                     "style": "1",     // Velas Japonesas
                     "locale": "es",
                     "enable_publishing": false,
@@ -146,6 +159,13 @@
                         "paneProperties.vertGridProperties.color": "rgba(0,0,0,0)",
                         "paneProperties.horzGridProperties.color": "rgba(0,0,0,0)",
 
+                        // REDUCIR HUECO DERECHO A SOLO 4 BARRAS DE MARGEN
+                        "paneProperties.rightOffset": 4,
+
+                        // LÍNEA DE PRECIO ACTUAL: ROJA Y EN PUNTOS
+                        "mainSeriesProperties.priceLineColor": "#ff5252",
+                        "mainSeriesProperties.priceLineStyle": 2, // 2 = Estilo punteado (Dotted)
+
                         // VELAS ALCISTAS: CUERPO BLANCO Y BORDES/MECHAS NEGRAS
                         "mainSeriesProperties.candleStyle.upColor": "#ffffff",
                         "mainSeriesProperties.candleStyle.borderUpColor": "#000000",
@@ -156,7 +176,7 @@
                         "mainSeriesProperties.candleStyle.borderDownColor": "#000000",
                         "mainSeriesProperties.candleStyle.wickDownColor": "#000000",
 
-                        // ESCALAS DE PRECIO Y TIEMPO (BLANCAS CON TEXTO NEGRO)
+                        // ESCALAS DE PRECIO Y TIEMPO
                         "scalesProperties.backgroundColor": "#ffffff",
                         "scalesProperties.lineColor": "#e0e3eb",
                         "scalesProperties.textColor": "#131722"
@@ -179,10 +199,12 @@
                 card.classList.remove('barrido-top', 'barrido-bottom');
 
                 if (data.tipo === 'HIGH') {
+                    // Barrido de máximo -> Recuadro rojo parpadeante
                     card.classList.add('barrido-top');
                     status.innerHTML = "🚨 BARRIDO MÁXIMO";
                     status.style.color = "#ff5252";
                 } else if (data.tipo === 'LOW') {
+                    // Barrido de mínimo -> Recuadro verde parpadeante
                     card.classList.add('barrido-bottom');
                     status.innerHTML = "🚨 BARRIDO MÍNIMO";
                     status.style.color = "#26a69a";
